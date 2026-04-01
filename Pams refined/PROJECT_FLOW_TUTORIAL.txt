@@ -1,0 +1,1044 @@
+====================================================
+  PARAGON APARTMENT MANAGEMENT SYSTEM (PAMS)
+  PROJECT FLOW & TUTORIAL GUIDE
+  Advanced Software Development - UWE Bristol
+====================================================
+
+TABLE OF CONTENTS
+------------------
+1. System Architecture Overview
+2. User Roles & Responsibilities
+3. Full Workflow: From Tenant Registration to Payment
+4. Key Business Processes Step-by-Step
+5. Database Schema Relationships
+6. Common Scenarios
+
+
+====================================================
+1. SYSTEM ARCHITECTURE OVERVIEW
+====================================================
+
+PAMS is built with a layered architecture:
+
+┌─────────────────────────────────────────────┐
+│          VIEWS (UI Layer)                   │
+│  - login_view.py (Authentication)           │
+│  - base_dashboard.py (Shared UI)            │
+│  - [role]_dashboard.py (Role-specific UI)   │
+└──────────────┬──────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────┐
+│        CONTROLLERS (Business Logic)         │
+│  - tenant_controller.py                     │
+│  - apartment_controller.py                  │
+│  - payment_controller.py                    │
+│  - maintenance_controller.py                │
+│  - complaint_controller.py                  │
+│  - user_controller.py                       │
+│  - auth_controller.py                       │
+└──────────────┬──────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────┐
+│         MODELS (Data Schemas)               │
+│  - tenant_model.py (Tenant info)            │
+│  - apartment_model.py (Apartment details)   │
+│  - lease_model.py (Lease agreements)        │
+│  - payment_model.py (Payment records)       │
+│  - maintenance_model.py (Maintenance reqs)  │
+│  - complaint_model.py (Complaint logs)      │
+│  - user_model.py (User accounts)            │
+└──────────────┬──────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────┐
+│      DATABASE (MongoDB Atlas)               │
+│  Collections: tenants, apartments, leases,  │
+│              users, payments, maintenance,  │
+│              complaints, reports            │
+└─────────────────────────────────────────────┘
+
+
+Key Technologies:
+- Frontend: CustomTkinter (Modern Python GUI)
+- Backend: Python 3.x
+- Database: MongoDB Atlas (NoSQL)
+- Authentication: bcrypt password hashing
+- Validation: Custom validators module
+
+
+====================================================
+2. USER ROLES & RESPONSIBILITIES
+====================================================
+
+---ROLE 1: MANAGER---
+User: manager1 | Password: Manager@1
+
+Overview of entire system across all cities.
+
+Key Features:
+  ✓ System-wide occupancy dashboard
+  ✓ Performance reports across all locations
+  ✓ Add new city/branch locations
+  ✓ View consolidated financial data
+  ✓ Monitor staff performance
+
+Database Access: All locations
+
+---ROLE 2: ADMINISTRATOR (Location-Based)---
+Users:
+  admin_bristol | Password: Admin@1   (Bristol location)
+  admin_london  | Password: Admin@2   (London location)
+
+Responsible for managing a specific location.
+
+Key Features:
+  ✓ Manage staff user accounts (create/edit/reset passwords)
+  ✓ Register and manage apartments
+  ✓ View and track lease agreements
+  ✓ Financial and maintenance reports for location
+  ✓ Overall location occupancy
+
+Database Access: Specific location only
+
+---ROLE 3: FRONT DESK STAFF---
+User: frontdesk1 | Password: Front@1
+
+First point of contact for tenant services.
+
+Key Features:
+  ✓ Register new tenants
+  ✓ Search and lookup tenant records
+  ✓ Edit tenant information
+  ✓ Assign apartments to tenants (create leases)
+  ✓ Early lease termination with penalty calculation
+  ✓ Log maintenance requests
+  ✓ Log tenant complaints
+  ✓ Process settings (change password)
+
+Database Access: Their specific location
+
+---ROLE 4: FINANCE MANAGER---
+User: finance1 | Password: Finance@1
+
+Handles all financial operations.
+
+Key Features:
+  ✓ View all invoices for location
+  ✓ Record payments (mark as paid)
+  ✓ Manage overdue payments
+  ✓ Create new invoices for tenants
+  ✓ Financial reports with charts/analytics
+  ✓ Payment history tracking
+
+Database Access: Their specific location
+
+---ROLE 5: MAINTENANCE STAFF---
+User: maint1 | Password: Maint@1
+
+Handles all property maintenance.
+
+Key Features:
+  ✓ View assigned maintenance tasks
+  ✓ Assign and schedule requests
+  ✓ Update request status (submitted → investigating → scheduled → in_progress → resolved)
+  ✓ Log time and cost spent on repairs
+  ✓ Priority-based task queue
+  ✓ Close/complete maintenance requests
+
+Database Access: Their specific location
+
+---ROLE 6: TENANT---
+Example Users (auto-created during seed):
+  alice1    | Password: Tenant@1
+  michael2  | Password: Tenant@1
+  priya3    | Password: Tenant@1
+  james4    | Password: Tenant@1 (Bristol)
+  fatima5   | Password: Tenant@1 (London)
+
+Tenant's personal portal.
+
+Key Features:
+  ✓ View personal payment history and invoices
+  ✓ Make card payments (emulated)
+  ✓ Submit repair/maintenance requests
+  ✓ Track repair progress
+  ✓ Submit complaints
+  ✓ View payment history charts
+  ✓ Compare neighbor payments
+  ✓ View late payment history
+  ✓ Manage profile settings
+
+Database Access: Personal data only
+
+
+====================================================
+3. FULL WORKFLOW: FROM TENANT REGISTRATION TO PAYMENT
+====================================================
+
+This section walks through a complete end-to-end scenario.
+
+--------SCENARIO--------
+A new tenant, "Sarah Johnson", wants to rent an apartment at the Bristol location.
+She goes through the entire lifecycle: registration → apartment assignment → 
+maintenance issue → payment.
+
+
+STEP 1: INITIAL SETUP (Server/Admin)
+======================================
+
+Who: System Administrator
+When: Before any tenants arrive
+What: Register apartments
+
+1. Admin logs in → goes to "Admin Dashboard" → "Register Apartment"
+2. Fills in:
+   - Apartment Number: "101"
+   - Apartment Type: "2-Bedroom"
+   - Monthly Rent: £1,200
+   - Number of Rooms: 2
+   - Floor: 1
+   - Size: 850 sqft
+   - Amenities: "WiFi, Parking, Gym"
+
+3. Apartment is created with status: "available"
+4. Database: apartments collection now has this apartment
+   Status progression: available → occupied (when tenant assigned) → vacant (when tenant leaves)
+
+
+STEP 2: TENANT REGISTRATION (Front Desk)
+==========================================
+
+Who: Front Desk Staff
+When: When tenant comes to register
+What: Create tenant profile
+
+1. Front Desk logs in → "Front Desk Dashboard" → "Register Tenant"
+2. Fills in tenant information:
+   - NI Number: "SJ123456C" (validated format)
+   - Full Name: "Sarah Johnson"
+   - Phone: "07700123456" (validated)
+   - Email: "sarah@example.com" (validated)
+   - Occupation: "Software Engineer"
+   - References: "John Doe - 07700654321"
+   - Lease Period: 12 months
+   - Date of Birth: "1990-01-15"
+   - Emergency Contact: "07700987654"
+   - Apartment Requirements: "2-Bedroom, near transport"
+
+3. Front Desk clicks "Register Tenant"
+
+BACKEND PROCESS (Automatic):
+  a) Tenant Controller validates all fields
+  b) Checks if NI number already exists
+  c) Creates TENANT document in MongoDB:
+     {
+       "_id": ObjectId("..."),
+       "ni_number": "SJ123456C",
+       "full_name": "Sarah Johnson",
+       "phone": "07700123456",
+       "email": "sarah@example.com",
+       "occupation": "Software Engineer",
+       "references": "John Doe - 07700654321",
+       "apartment_requirements": "2-Bedroom, near transport",
+       "lease_period_months": 12,
+       "date_of_birth": "1990-01-15",
+       "emergency_contact": "07700987654",
+       "status": "pending",  ← No apartment yet
+       "location": "Bristol",
+       "created_by": "frontdesk1",
+       "created_at": datetime
+     }
+
+  d) Generates unique username: "sarah.j245" (first name + last initial + 3 random digits)
+  e) Generates temporary password: "Tenant@1"
+  f) Creates USER document for login:
+     {
+       "_id": ObjectId("..."),
+       "username": "sarah.j245",
+       "password_hash": bcrypt_hash("Tenant@1"),
+       "role": "tenant",
+       "full_name": "Sarah Johnson",
+       "email": "sarah@example.com",
+       "phone": "07700123456",
+       "tenant_id": ObjectId("..."),
+       "apartment_id": None,  ← Not assigned yet
+       "lease_id": None,      ← No lease yet
+       "location": "Bristol",
+       "is_active": True,
+       "created_by": "frontdesk1"
+     }
+
+4. Front Desk receives confirmation:
+   "✓ Tenant registered! Login: sarah.j245 | Password: Tenant@1"
+5. Front Desk delivers credentials to Sarah
+
+
+STEP 3: APARTMENT ASSIGNMENT (Front Desk)
+===========================================
+
+Who: Front Desk Staff
+When: When tenant is ready to move in
+What: Create lease agreement & assign apartment
+
+1. Front Desk logs in → "Front Desk Dashboard" → "Assign Apartment"
+2. Selects:
+   - Tenant: "Sarah Johnson (SJ123456C)"
+   - Apartment: "101 — 2-Bedroom — £1200/mo"
+   - Start Date: "2024-03-01"
+   - End Date: "2025-03-01"
+   - Deposit: £1200
+
+3. Front Desk clicks "Assign Apartment"
+
+BACKEND PROCESS (Automatic):
+  a) Apartment Controller validates inputs
+  b) Checks apartment status is "available"
+  c) Creates LEASE document:
+     {
+       "_id": ObjectId("..."),
+       "tenant_id": ObjectId("sarah's ID"),
+       "tenant_name": "Sarah Johnson",
+       "apartment_id": ObjectId("101's ID"),
+       "apartment_number": "101",
+       "location": "Bristol",
+       "start_date": "2024-03-01",
+       "end_date": "2025-03-01",
+       "monthly_rent": 1200,
+       "deposit_amount": 1200,
+       "status": "active",
+       "created_by": "frontdesk1",
+       "created_at": datetime
+     }
+
+  d) Updates APARTMENT document:
+     Status: "available" → "occupied"
+     current_tenant_id: Set to Sarah's ID
+
+  e) Updates TENANT document:
+     status: "pending" → "active"
+     apartment_id: Set to apartment's ID
+
+  f) Updates USER document:
+     apartment_id: Set to apartment's ID
+     lease_id: Set to lease's ID
+
+  g) Creates initial PAYMENT document (automatic invoice):
+     {
+       "_id": ObjectId("..."),
+       "tenant_id": Sarah's ID,
+       "tenant_name": "Sarah Johnson",
+       "apartment_number": "101",
+       "location": "Bristol",
+       "amount": 1200,  ← Monthly rent
+       "due_date": "2024-04-01",
+       "status": "due",  ← (unpaid, due, overdue, paid)
+       "payment_type": "monthly_rent",
+       "invoice_month": "2024-03",
+       "created_at": datetime
+     }
+
+4. Front Desk receives: "Apartment assigned! Lease ID: [ID]"
+
+
+STEP 4: TENANT LOGIN & PROFILE (Tenant)
+=========================================
+
+1. Sarah logs in with credentials: sarah.j245 / Tenant@1
+2. System authenticates via Auth Controller (checks bcrypt hash)
+3. User is redirected to "Tenant Dashboard"
+4. Dashboard shows:
+   - Current apartment: "101"
+   - Lease status: "Active"
+   - Monthly rent: £1,200
+   - Next payment due: [date]
+
+Dashboard Sections:
+  a) PAYMENTS: See all invoices, paid/unpaid status, charts
+  b) MY MAINTENANCE: View submitted repair requests
+  c) MY COMPLAINTS: View submitted complaints
+  d) PAYMENT HISTORY: Charts showing payment trends
+  e) NEIGHBOR COMPARISON: See average payments in building
+  f) LATE PAYMENT HISTORY: Track any late payments
+  g) SETTINGS: Change password
+
+
+STEP 5: MAINTENANCE REQUEST (Tenant/Front Desk)
+================================================
+
+Scenario: Sarah's shower is broken. She needs maintenance.
+
+METHOD A: Tenant Submits Directly
+  1. Sarah logs into Tenant Portal → "Submit Maintenance Request"
+  2. Fills in:
+     - Issue: "Broken shower - water not draining"
+     - Priority: "High"
+  3. Clicks "Submit Request"
+
+METHOD B: Front Desk Logs on Behalf
+  1. Front Desk → "Maintenance" → "+ Log New Request"
+  2. Selects tenant and details
+  3. Submits request
+
+BACKEND PROCESS:
+  a) Creates MAINTENANCE document:
+     {
+       "_id": ObjectId("..."),
+       "tenant_id": Sarah's ID,
+       "tenant_name": "Sarah Johnson",
+       "apartment_id": "101's ID",
+       "apartment_number": "101",
+       "location": "Bristol",
+       "issue_title": "Broken shower - water not draining",
+       "description": "Shower isn't draining properly",
+       "priority": "High",
+       "status": "submitted",  ← Initial status
+       "created_at": datetime
+     }
+
+  b) Front Desk can view in their maintenance section
+  c) Maintenance Staff can see new request in priority queue
+
+
+STEP 6: MAINTENANCE HANDLING (Maintenance Staff)
+=================================================
+
+1. Maintenance Staff logs in → "Maintenance Dashboard"
+2. Sees Sarah's request in queue (sorted by priority)
+3. Clicks on request → "Assign to Self" or "Schedule"
+4. Updates status: "submitted" → "investigating"
+5. Goes to apartment, assesses issue
+6. Updates status: "investigating" → "scheduled"
+7. Sets: "Scheduled for Friday 3PM"
+8. On Friday: "investigating" → "in_progress"
+9. Completes repair, logs:
+   - Time spent: 1.5 hours
+   - Cost: £75 (parts + labor)
+   - Updates status: "in_progress" → "resolved"
+10. Adds notes: "Replaced drain pipe, cleared blockage"
+
+DATABASE UPDATES:
+  Updates MAINTENANCE document with:
+  - status: "resolved"
+  - assigned_to: maintenance1
+  - time_spent: 1.5
+  - cost: 75
+  - notes: "Replaced drain pipe..."
+  - completed_at: datetime
+
+Sarah sees in Tenant Portal:
+  - Status updates in real-time
+  - Can see "Resolved" message
+  - Can view cost breakdown
+
+
+STEP 7: COMPLAINT LOGGING (Optional)
+=====================================
+
+If Sarah isn't satisfied with service: she can file a complaint separately.
+
+1. Tenant Portal → "Submit Complaint"
+2. Fills:
+   - Type: "Service Quality"
+   - Subject: "Slow repair response time"
+   - Description: "Waited 5 days for maintenance"
+3. Submits
+
+BACKEND:
+  a) Creates COMPLAINT document
+  b) Assigned to front desk for follow-up
+  c) Status: "open" → "acknowledged" → "resolved"
+
+
+STEP 8: PAYMENT PROCESSING (Finance Manager & Tenant)
+======================================================
+
+METHOD A: Tenant Makes Payment Online
+  1. Sarah logs in → "Payments" → Views "Due invoices"
+  2. Sees: "Monthly Rent - March 2024: £1,200 (Due)"
+  3. Clicks "Pay Now"
+  4. Emulated card payment form appears
+  5. Enters (test) card details
+  6. Payment processed
+
+BACKEND:
+  a) Finance Controller processes payment
+  b) Updates PAYMENT document:
+     - status: "due" → "paid"
+     - paid_at: datetime
+     - payment_method: "card"
+  c) Generates RECEIPT document
+  d) Tenant sees confirmation: "Payment successful!"
+
+METHOD B: Finance Manager Records Manual Payment
+  1. Finance Manager logs in → "Invoices"
+  2. Sees Sarah's unpaid invoice for £1,200
+  3. Clicks "Record Payment"
+  4. Marks as "Paid"
+  5. System auto-records payment
+
+Both methods result in:
+  - Invoice marked as PAID
+  - Payment history updated
+  - Next month's invoice auto-created
+  - Receipt sent to tenant
+
+PAYMENT REPORTS:
+Finance Manager can view:
+  - Total collected: £[amount]
+  - Overdue payments: £[amount]
+  - Collection rate: [%]
+  - Charts: Payment trends, overdue timeline
+
+
+STEP 9: END OF LEASE (Optional)
+================================
+
+When lease is ending or tenant wants to leave early:
+
+EARLY TERMINATION:
+  1. Front Desk → "Tenant Lookup" → Select Sarah → "Early Termination"
+  2. System calculates:
+     - Penalty: 5% of monthly rent = £60
+     - Notice period: 1 month
+  3. Lease status: "early_termination_requested"
+  4. 1 month later: Lease ends
+
+NORMAL ENDING:
+  1. End date arrives (2025-03-01)
+  2. System flags lease as "ended"
+  3. Apartment status: "occupied" → "vacant"
+  4. Sarah's status: "active" → "inactive"
+  5. Admin can then assign apartment to new tenant
+
+
+====================================================
+4. KEY BUSINESS PROCESSES STEP-BY-STEP
+====================================================
+
+---PROCESS 1: USER ACCOUNT MANAGEMENT---
+
+CREATE STAFF ACCOUNT (Admin only):
+  1. Admin → "Manage Staff" → "+ Add New Staff"
+  2. Fills: Name, role, email, initial password
+  3. System generates username (email-based)
+  4. Staff receives credentials
+  5. On first login, prompted to change password
+
+RESET PASSWORD (Admin only):
+  1. Admin → "Manage Staff" → Select staff member → "Reset Password"
+  2. Generates new temporary password
+  3. Staff member can reset on next login
+
+CHANGE OWN PASSWORD (All roles):
+  1. Any dashboard → "Settings"
+  2. → "Change Password"
+  3. Enters current password
+  4. Enters new password (min 8 chars, must include uppercase/number)
+  5. Confirms
+  6. Password updated via bcrypt hashing
+
+
+---PROCESS 2: APARTMENT MANAGEMENT---
+
+REGISTER APARTMENT:
+  1. Admin → Apartments → "+ Register New"
+  2. Fills all details
+  3. Status = "available"
+
+UPDATE APARTMENT:
+  1. Admin → View apartment details → "Edit"
+  2. Modifies: amenities, rent, etc.
+  3. Changes saved
+
+VIEW OCCUPANCY:
+  1. Admin (or higher) → Dashboard
+  2. Sees: Total apts, occupied, vacant, avg rent
+  3. Can filter by floor, type, status
+
+MANAGE VACANT APARTMENTS:
+  1. When tenant moves out
+  2. Admin flags: "Schedule maintenance"
+  3. Maintenance staff can view vacant apts
+  4. After cleaning/repairs → status = "available"
+
+
+---PROCESS 3: PAYMENT MANAGEMENT---
+
+AUTO-INVOICE CREATION:
+  1. When lease is created → First invoice generated
+  2. Every month (automatic): Next month's invoice created
+  3. Due date: 1st of each month
+  4. Status monitoring: due → overdue (after due date) → paid
+
+RECORD PAYMENT:
+  1. Finance → Invoices → Select unpaid → "Record Payment"
+  2. Can choose: date, amount, method (cash, card, transfer)
+  3. Payment recorded
+  4. Receipt generated
+
+REPORTS:
+  1. Finance → Reports
+  2. Select date range
+  3. View: Total collected, overdue, payment rate
+  4. Export/Print reports
+
+
+---PROCESS 4: MAINTENANCE WORKFLOW---
+
+SUBMIT REQUEST:
+  1. Tenant or Front Desk submits
+  2. Status: "submitted"
+  3. Auto-notified to maintenance team
+
+INVESTIGATE:
+  1. Maintenance staff views request
+  2. Changes status → "investigating"
+  3. Goes to apartment, assesses
+
+SCHEDULE:
+  1. After investigation
+  2. Changes status → "scheduled"
+  3. Books appointment time
+
+EXECUTE:
+  1. On scheduled date
+  2. Changes status → "in_progress"
+  3. Completes work
+  4. Logs time & cost
+  5. Changes status → "resolved"
+
+CLOSE:
+  1. Final notes added
+  2. Request marked complete
+  3. Tenant can see updates
+
+
+---PROCESS 5: COMPLAINT HANDLING---
+
+LOG COMPLAINT:
+  1. Tenant or Front Desk logs
+  2. Status: "open"
+  3. Type: categorized (maintenance, staff, neighbor, other)
+
+ACKNOWLEDGE:
+  1. Front Desk → Reviews complaint
+  2. Status: "open" → "acknowledged"
+  3. Notes: Initial response/action plan
+
+RESOLVE:
+  1. After action taken
+  2. Status: "acknowledged" → "resolved"
+  3. Resolution notes: What was done
+
+
+---PROCESS 6: REPORTING & ANALYTICS---
+
+ADMIN REPORTS:
+  - Occupancy: % occupied, vacancy rate, avg rent
+  - Tenant: registrations, lease status, terminations
+  - Financial: monthly collected, outstanding, rate
+  - Maintenance: requests by type/priority, resolution time
+
+FINANCE REPORTS:
+  - Revenue: total collected, projected, by tenant
+  - Overdue: amount, %, breakdown by tenant
+  - Trends: monthly comparison, payment timing
+
+MANAGER REPORTS:
+  - System-wide: all locations combined
+  - Performance: locations ranked by occupancy/revenue
+  - Trends: overall trajectory
+
+
+====================================================
+5. DATABASE SCHEMA RELATIONSHIPS
+====================================================
+
+COLLECTION: users
+  ├─ _id (ObjectId) - Unique user ID
+  ├─ username (String) - Unique login username
+  ├─ password_hash (String) - Bcrypt hash
+  ├─ role (String) - "admin", "manager", "front_desk", "finance_manager", "maintenance_staff", "tenant"
+  ├─ full_name (String)
+  ├─ email (String)
+  ├─ phone (String)
+  ├─ location (String) - "Bristol", "London", etc.
+  ├─ tenant_id (ObjectId) - References tenants collection (if role="tenant")
+  ├─ apartment_id (ObjectId) - References apartments collection
+  ├─ lease_id (ObjectId) - References leases collection
+  ├─ is_active (Boolean)
+  ├─ created_at (DateTime)
+  └─ updated_at (DateTime)
+
+COLLECTION: tenants
+  ├─ _id (ObjectId) - Unique tenant ID
+  ├─ ni_number (String) - National Insurance number
+  ├─ full_name (String)
+  ├─ phone (String)
+  ├─ email (String)
+  ├─ occupation (String)
+  ├─ references (String)
+  ├─ apartment_requirements (String)
+  ├─ lease_period_months (Integer)
+  ├─ date_of_birth (String)
+  ├─ emergency_contact (String)
+  ├─ status (String) - "pending", "active", "inactive", "early_termination_requested"
+  ├─ location (String)
+  ├─ apartment_id (ObjectId) - References apartments collection
+  ├─ created_by (String) - Username of staff who registered
+  ├─ created_at (DateTime)
+  └─ updated_at (DateTime)
+
+COLLECTION: apartments
+  ├─ _id (ObjectId) - Unique apartment ID
+  ├─ apartment_number (String) - E.g., "101", "205"
+  ├─ location (String) - Building location
+  ├─ apartment_type (String) - "1-Bedroom", "2-Bedroom", "3-Bedroom", "Studio"
+  ├─ monthly_rent (Float) - In pounds
+  ├─ num_rooms (Integer)
+  ├─ floor (Integer)
+  ├─ size_sqft (Float)
+  ├─ amenities (Array) - ["WiFi", "Parking", "Gym", etc.]
+  ├─ status (String) - "available", "occupied", "maintenance"
+  ├─ current_tenant_id (ObjectId) - References tenants collection
+  ├─ created_by (String)
+  ├─ created_at (DateTime)
+  └─ updated_at (DateTime)
+
+COLLECTION: leases
+  ├─ _id (ObjectId) - Unique lease ID
+  ├─ tenant_id (ObjectId) - References tenants collection
+  ├─ tenant_name (String)
+  ├─ apartment_id (ObjectId) - References apartments collection
+  ├─ apartment_number (String)
+  ├─ location (String)
+  ├─ start_date (DateTime)
+  ├─ end_date (DateTime)
+  ├─ monthly_rent (Float)
+  ├─ deposit_amount (Float)
+  ├─ status (String) - "active", "ended", "early_termination_requested"
+  ├─ created_by (String)
+  ├─ created_at (DateTime)
+  └─ updated_at (DateTime)
+
+COLLECTION: payments
+  ├─ _id (ObjectId)
+  ├─ tenant_id (ObjectId) - References tenants collection
+  ├─ tenant_name (String)
+  ├─ apartment_number (String)
+  ├─ location (String)
+  ├─ amount (Float) - Pounds
+  ├─ due_date (DateTime)
+  ├─ paid_date (DateTime) - Null if unpaid
+  ├─ status (String) - "due", "overdue", "paid"
+  ├─ payment_method (String) - "online", "cash", "transfer", "check"
+  ├─ payment_type (String) - "monthly_rent", "deposit", "penalty", "other"
+  ├─ invoice_month (String) - "2024-03"
+  ├─ created_at (DateTime)
+  └─ updated_at (DateTime)
+
+COLLECTION: maintenance
+  ├─ _id (ObjectId)
+  ├─ tenant_id (ObjectId) - References tenants collection
+  ├─ tenant_name (String)
+  ├─ apartment_id (ObjectId) - References apartments collection
+  ├─ apartment_number (String)
+  ├─ location (String)
+  ├─ issue_title (String)
+  ├─ description (String)
+  ├─ priority (String) - "Low", "Medium", "High", "Critical"
+  ├─ status (String) - "submitted", "investigating", "scheduled", "in_progress", "resolved", "cancelled"
+  ├─ assigned_to (String) - Username of maintenance staff
+  ├─ scheduled_date (DateTime)
+  ├─ time_spent (Float) - Hours
+  ├─ cost (Float) - Pounds
+  ├─ notes (String)
+  ├─ created_at (DateTime)
+  ├─ completed_at (DateTime)
+  └─ updated_at (DateTime)
+
+COLLECTION: complaints
+  ├─ _id (ObjectId)
+  ├─ tenant_id (ObjectId) - References tenants collection
+  ├─ tenant_name (String)
+  ├─ apartment_id (ObjectId) - References apartments collection
+  ├─ apartment_number (String)
+  ├─ location (String)
+  ├─ complaint_type (String) - "Maintenance", "Staff", "Neighbor", "Noise", "Other"
+  ├─ subject (String)
+  ├─ description (String)
+  ├─ status (String) - "open", "acknowledged", "resolved", "closed"
+  ├─ priority (String) - "Low", "Medium", "High"
+  ├─ assigned_to (String) - Username of staff handling
+  ├─ resolution_notes (String)
+  ├─ created_at (DateTime)
+  ├─ resolved_at (DateTime)
+  └─ updated_at (DateTime)
+
+KEY RELATIONSHIPS:
+┌──────────────────────────────────────────────┐
+│  users                                       │
+│  (staff + tenants login accounts)            │
+└────────┬──────────────────────────────────────┘
+         │
+         ├─► tenant_id ──► TENANTS collection
+         ├─► apartment_id ──► APARTMENTS collection
+         └─► lease_id ──► LEASES collection
+         
+TENANTS ◄────────────────► APARTMENTS
+  (many)       (one-to-many       (one)
+              relationship)
+                │
+                └─► LEASES (historical & current)
+                     │
+                     └─► PAYMENTS (monthly invoices)
+                     └─► MAINTENANCE (repair requests)
+                     └─► COMPLAINTS (tenant issues)
+
+
+====================================================
+6. COMMON SCENARIOS
+====================================================
+
+---SCENARIO 1: NEW TENANT MOVE-IN---
+
+Timeline: Tenant arrives Monday morning
+
+FRIDAY (Preparation):
+  1. Front Desk registers tenant
+  2. Gets credentials: username & password
+  3. Apartment assigned, lease created
+  4. First month's invoice generated
+  5. Maintenance pre-checks apartment
+
+MONDAY (Move-in):
+  1. Tenant arrives, checks apartment
+  2. Tenant logs into portal, views details
+  3. Tenant sets up payment method
+  4. If issues found: Tenant submits maintenance request
+
+WEDNESDAY (First Payment):
+  1. Tenant receives reminder (automatic)
+  2. Logs into portal, pays first month's rent
+  3. Receipt issued
+  4. Finance manager can confirm via dashboard
+
+
+---SCENARIO 2: TENANT WITH PAYMENT ISSUE---
+
+DAY 1: Payment Due
+  - Invoice status: "due"
+  - Tenant receives notification
+
+DAY 15: Overdue
+  - Invoice status: "due" → "overdue"
+  - Finance manager flags account
+  - Sends reminder message
+
+DAY 20: Escalation
+  - Finance manager contacts tenant
+  - Discusses payment plan or issues
+  - Can mark as "payment plan approved"
+
+DAY 25: Payment Received
+  - Tenant pays
+  - Status: "overdue" → "paid"
+  - Late payment recorded in their history
+  - Finance manager confirma receipt
+
+Management reports show:
+  - Number of overdue accounts
+  - Days overdue avg
+  - Percentage of on-time payers
+
+
+---SCENARIO 3: TENANT COMPLAINT---
+
+DAY 1: Complaint Lodged
+  1. Tenant → "Submit Complaint"
+  2. Issue: "Noisy neighbors"
+  3. Status: "open"
+  4. Assigned to: Front Desk Staff
+
+NEXT DAY:
+  1. Front Desk reads complaint
+  2. Talks to tenant about issue
+  3. Status: "open" → "acknowledged"
+  4. Notes: "Spoke with tenant, will monitor situation"
+  5. May assign to: Maintenance (if structural) or resolve directly
+
+DAY 5-10:
+  1. Action taken (e.g., talked to neighbors)
+  2. Follow-up with tenant
+  3. Status: "acknowledged" → "resolved"
+  4. Resolution notes: "Neighbors agreed to keep noise down"
+  5. Tenant can view full timeline in portal
+
+
+---SCENARIO 4: APARTMENT TURNOVER---
+
+Old Tenant Moves Out (End of Lease):
+
+DAY 1 (Lease End):
+  - Lease status: "active" → "ended"
+  - Apartment: "occupied" → "vacant"
+  - Tenant: "active" → "inactive"
+
+NEXT WEEK (Inspection & Maintenance):
+  1. Admin schedules inspection
+  2. Maintenance staff checks apartment
+  3. Creates maintenance request if needed: "Post-move cleaning, paint touch-ups"
+  4. Priority: "Medium"
+
+WEEK 2-3 (Repairs):
+  1. Maintenance completes repairs
+  2. Updates costs in system
+  3. Takes photos (optional)
+  4. Apartment: "vacant" → "available"
+
+New Tenant Moves In:
+  1. Front Desk follows same process as Scenario 1
+  2. Apartment: "available" → "occupied"
+  3. Fresh lease created
+  4. New tenant onboarded
+
+
+---SCENARIO 5: EARLY TERMINATION---
+
+Tenant wants to leave before lease expires:
+
+REQUEST:
+  1. Tenant (or Front Desk on their behalf) → Early Termination
+  2. System calculates penalty:
+     - Original lease: 12 months
+     - Months fulfilled: 6 months
+     - Early termination: 5% of monthly rent = £60
+  3. Notice period: 1 month required
+
+TRACKING:
+  1. Tenant status: "active" → "early_termination_requested"
+  2. Final payment due: current month + £60 penalty
+  3. Lease end moved forward 1 month
+
+COMPLETION:
+  1. 1 month later, lease ends
+  2. Apartment becomes vacant
+  3. Tenant marked "inactive"
+
+Financial Impact:
+  1. One less month of regular rent (-£1,200)
+  2. Early termination penalty (+£60)
+  3. Potential deposit issues (damage claims, etc.)
+
+
+---SCENARIO 6: STAFF PERFORMANCE MONITORING---
+
+Manager Views Reports:
+
+OCCUPANCY METRICS:
+  - Bristol: 85% occupied (17 of 20 apartments)
+  - London: 90% occupied (18 of 20 apartments)
+  - Average rent price: £1,150
+  - Vacancy cost: £3,000/month
+
+FINANCIAL METRICS:
+  - Total monthly revenue: £42,000
+  - Collected this month: £40,800 (97.1%)
+  - Outstanding: £1,200 (1 tenant)
+  - Average collection time: 3 days
+
+MAINTENANCE METRICS:
+  - Average resolution time: 2.5 days
+  - Pending requests: 3
+  - Critical: 1 (boiler repair)
+  - Cost this month: £450
+
+STAFF PERFORMANCE:
+  - Front Desk: Registered 2 new tenants
+  - Maintenance: Resolved 8 requests
+  - Finance: Collected 97% of invoices
+  - Admin: Apartment turnover processed successfully
+
+Manager can use this data to:
+  - Identify problem areas
+  - Performance evaluate staff
+  - Plan future resource allocation
+  - Forecast revenue
+
+
+====================================================
+IMPORTANT VALIDATION RULES
+====================================================
+
+NI NUMBER:
+  Format: 2 letters, 6 digits, 1 letter
+  Example: AB123456C
+
+EMAIL:
+  Must contain @ and valid domain
+  Example: user@example.com
+
+PHONE:
+  UK format starting with 07xxx
+  11 digits total
+
+PASSWORD:
+  Minimum 8 characters
+  Must contain uppercase letter
+  Must contain digit
+
+DATE:
+  Format: YYYY-MM-DD
+  End date must be after start date
+
+MONTHLY RENT:
+  Positive number, £0.01 or more
+  Typically £500-£2,500
+
+
+====================================================
+QUICK REFERENCE: COMMON TASKS
+====================================================
+
+ADMIN:
+  Register apartment → Go to "Register Apartment"
+  Create staff account → Go to "Manage Staff" → "+ Add Staff"
+  View reports → Go to "Reports" → Select period
+
+FRONT DESK:
+  Register tenant → Go to "Register Tenant" → Fill form
+  Find tenant → Go to "Tenant Lookup" → Search
+  Assign apartment → Go to "Assign Apartment" → Select tenant & apt
+  Log maintenance → Go to "Maintenance" → "+ Log Request"
+  Log complaint → Go to "Complaints" → "+ Log Complaint"
+
+FINANCE:
+  View invoices → Go to "Invoices" → Filter by status
+  Record payment → Select invoice → "Record Payment"
+  View reports → Go to "Reports" → Choose dates
+
+MAINTENANCE:
+  View requests → Go to "Maintenance" → See priority queue
+  Update status → Click request → "Assign to Me" or "Update Status"
+  Log completion → Add time, cost, notes → "Mark Resolved"
+
+TENANT:
+  View invoices → Go to "Payments" → See all invoices
+  Pay invoice → Click "Pay Now" → Enter card details
+  Submit request → Go to "Submit Maintenance" → Describe issue
+  View status → Go to "My Maintenance" → See updates live
+
+
+====================================================
+END OF TUTORIAL
+====================================================
+
+For technical details, refer to:
+- controllers/ for business logic
+- models/ for data structures
+- views/ for UI implementations
+- config/database.py for MongoDB setup
+
+Questions or issues? Check the system logs or contact development.
